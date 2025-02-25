@@ -1,0 +1,5 @@
+src/text_super_resolution/samples/
+src/text_super_resolution/data/
+src/text_super_resolution/ckpt/
+.DS_Store
+**/__pycache__/

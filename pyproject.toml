@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "text-super-resolution"
+version = "0.1.0"
+description = ""
+authors = ["Eric Xia"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pymupdf = "^1.25.3"
+pillow = "^11.1.0"
+easyocr = "^1.7.2"
+numpy = "^2.2.3"
+scikit-learn = "^1.6.1"
+tqdm = "^4.67.1"
+ipykernel = "^6.29.5"
+matplotlib = "^3.10.0"
+
+
+[tool.poetry.group.dev.dependencies]
+ipykernel = "^6.29.5"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
