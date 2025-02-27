@@ -62,6 +62,8 @@ class ResNetSR(nn.Module):
         out = self.exit(out)
         out = out + residual
 
+        out = torch.where(out > 150, torch.tensor(255.0, device=out.device), out)
+
         return out
     
 def test():

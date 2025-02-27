@@ -36,21 +36,22 @@ def edge_loss(pred, target):
     target_edges = sobel_filter(target)
     return F.mse_loss(pred_edges, target_edges)
 
-class CombinedLoss(nn.Module):
-    def __init__(self, reconstruction_loss_fn, edge_weight=0.1):
-        super(CombinedLoss, self).__init__()
-        self.reconstruction_loss_fn = reconstruction_loss_fn
-        self.edge_weight = edge_weight
-
-    def forward(self, pred, target):
-        reconstruction_loss = self.reconstruction_loss_fn(pred, target)
-        edge_loss_value = edge_loss(pred, target)
-        return reconstruction_loss + (self.edge_weight * edge_loss_value)
-
 def psnr(output, target):
     mse = F.mse_loss(output, target)
     psnr_value = 20 * math.log10(1.0) - 10 * math.log10(mse.item())  # assume inputs normalized to [0, 1]
     return psnr_value
+class CombinedLoss(nn.Module):
+    def __init__(self, reconstruction_loss_fn, edge_weight=0.1, psnr_weight=0.3):
+        super(CombinedLoss, self).__init__()
+        self.reconstruction_loss_fn = reconstruction_loss_fn
+        self.edge_weight = edge_weight
+        self.psnr_weight = psnr_weight
+
+    def forward(self, pred, target):
+        reconstruction_loss = self.reconstruction_loss_fn(pred, target)
+        edge_loss_value = edge_loss(pred, target)
+        psnr_value = psnr(pred, target)
+        return reconstruction_loss + (self.edge_weight * edge_loss_value) - (self.psnr_weight * psnr_value)
 
 
 def train_model_single_epoch(
