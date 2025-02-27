@@ -27,21 +27,35 @@ class LocalImageDataset(Dataset):
         target_image = torch.tensor(np.array(target_image, dtype=np.float32))
 
         if input_image.dim() == 2:
-            input_image = input_image.unsqueeze(0) 
-            target_image = target_image.unsqueeze(0) 
+            # Convert single channel (H,W) to (1,H,W)
+            input_image = input_image.unsqueeze(0)
+            target_image = target_image.unsqueeze(0)
+            
+            # Repeat the single channel 3 times to get (3,H,W)
+            input_image = input_image.repeat(3, 1, 1)
+            target_image = target_image.repeat(3, 1, 1)
         else:
-            input_image =  input_image.permute(2, 0, 1) 
-            target_image = target_image.permute(2, 0, 1) 
+            # Handle the case where images already have multiple channels
+            input_image = input_image.permute(2, 0, 1)
+            target_image = target_image.permute(2, 0, 1)
+            
+            # Ensure 3 channels if needed
+            if input_image.size(0) == 1:
+                input_image = input_image.repeat(3, 1, 1)
+            if target_image.size(0) == 1:
+                target_image = target_image.repeat(3, 1, 1)
         
+        # Normalize to [0, 1]
         input_image = input_image / 255.0 
         target_image = target_image / 255.0
 
         return input_image, target_image
     
     def _load_image(self, image_path):
+        # Changed to keep the image in grayscale mode for processing
+        # We'll convert to 3 channels in __getitem__
         image = Image.open(image_path).convert('L')
         return image
-
 
 def get_split_indices(num_images, test_indices, val_ratio=0.2, seed=42): 
     all_indices = np.arange(0, num_images)

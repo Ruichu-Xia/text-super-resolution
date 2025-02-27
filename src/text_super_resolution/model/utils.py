@@ -50,8 +50,8 @@ class CombinedLoss(nn.Module):
     def forward(self, pred, target):
         reconstruction_loss = self.reconstruction_loss_fn(pred, target)
         edge_loss_value = edge_loss(pred, target)
-        psnr_value = psnr(pred, target)
-        return reconstruction_loss + (self.edge_weight * edge_loss_value) - (self.psnr_weight * psnr_value)
+        # psnr_value = psnr(pred, target)
+        return reconstruction_loss + (self.edge_weight * edge_loss_value) #- (self.psnr_weight * psnr_value)
 
 
 def train_model_single_epoch(

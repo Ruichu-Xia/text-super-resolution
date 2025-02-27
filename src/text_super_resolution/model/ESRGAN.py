@@ -53,8 +53,8 @@ class RRDB(nn.Module):
 class RRDBNet(nn.Module):
     def __init__(
         self,
-        in_channels=1,
-        out_channels=1,
+        in_channels=3,
+        out_channels=3,
         num_features=64,
         num_rrdb=23,
         growth_channels=32,
@@ -114,7 +114,7 @@ class RRDBNet(nn.Module):
 
 
 class Discriminator_VGG(nn.Module):
-    def __init__(self, in_channels=1, base_channels=64):
+    def __init__(self, in_channels=3, base_channels=64):
         super(Discriminator_VGG, self).__init__()
 
         def conv_block(in_f, out_f, normalize=True):
@@ -262,19 +262,19 @@ def train_esrgan(
 
             # === 1. Train Discriminator ===
             d_optimizer.zero_grad()
-            
+            print(1111)
             # Generate super-resolution images, detach to avoid updating generator
             sr_imgs = generator(lr_imgs).detach()
-            
+            print(2222)
             # Get discriminator predictions for real and fake images
             real_pred = discriminator(hr_imgs)
             fake_pred = discriminator(sr_imgs)
-            
+            print(3333)
             # Calculate discriminator loss
             d_loss = ra_discriminator_loss(real_pred, fake_pred)
             d_loss.backward()
             d_optimizer.step()
-            
+            print(444444)
             epoch_d_loss += d_loss.item()
 
             # === 2. Train Generator ===
