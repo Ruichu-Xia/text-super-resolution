@@ -293,6 +293,10 @@ def train_esrgan(
       - Pretrain the generator on L1 pixel loss
       - Then finetune with adversarial + perceptual losses
     """
+
+    generator = generator.to(device)
+    discriminator = discriminator.to(device)
+
     generator.train()
     discriminator.train()
 
