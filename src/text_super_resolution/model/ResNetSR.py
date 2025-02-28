@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 
 
 class ResidualBlock(nn.Module):
@@ -31,39 +32,47 @@ class UpsampleBlock(nn.Module):
     
 
 class ResNetSR(nn.Module):
-    def __init__(self, upscale_factor: int, num_res_blocks=8, num_channels=3, num_features=64):
+    def __init__(self, upscale_factor=2, num_channels=1, num_features=64, num_res_blocks=16):
         super(ResNetSR, self).__init__()
-    
-        self.entry = nn.Conv2d(num_channels, num_features, kernel_size=3, stride=1, padding=1)
+        
+        # Calculate number of upsampling steps needed
+        self.num_upsamples = int(math.log2(upscale_factor))
+        if 2 ** self.num_upsamples != upscale_factor:
+            raise ValueError("Upscale factor must be a power of 2 (2, 4, 8, etc)")
+            
+        # Initial conv
+        self.entry = nn.Conv2d(num_channels, num_features, kernel_size=3, padding=1)
+        
+        # Residual blocks
+        res_blocks = []
+        for _ in range(num_res_blocks):
+            res_blocks.append(ResidualBlock(num_features))
+        self.res_blocks = nn.Sequential(*res_blocks)
+        
+        # Multiple upsampling layers
+        self.upsampling = nn.Sequential()
+        current_features = num_features
+        for i in range(self.num_upsamples):
+            self.upsampling.add_module(f'upsample_{i}', UpsampleBlock(current_features, 2))
+            
+        # Final output layer
+        self.exit = nn.Conv2d(num_features, num_channels, kernel_size=3, padding=1)
 
-        self.res_blocks = nn.Sequential(
-            *[ResidualBlock(num_features) for _ in range(num_res_blocks)]
-        )
-
-        self.mid_conv = nn.Conv2d(num_features, num_features, kernel_size=3, stride=1, padding=1)
-
-        upsampling = []
-        if upscale_factor in [2, 4, 8]:
-            for _ in range(int(torch.log2(torch.tensor(upscale_factor)))):
-                upsampling.append(UpsampleBlock(num_features, 2))
-        else:
-            print("Upsacle factor not accepted!")
-        self.upsampling = nn.Sequential(*upsampling)
-
-        self.exit = nn.Conv2d(num_features, num_channels, kernel_size=3, stride=1, padding=1)
-    
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        residual = F.interpolate(x, scale_factor=self.upsampling[0].upsample[1].upscale_factor, mode='bicubic', align_corners=False)
-
+    def forward(self, x):
+        # Initial conv
         out = self.entry(x)
+        
+        # Residual blocks
+        residual = out
         out = self.res_blocks(out)
-        out = self.mid_conv(out)
-        out = self.upsampling(out)
-        out = self.exit(out)
         out = out + residual
-
-        out = torch.where(out > 150, torch.tensor(255.0, device=out.device), out)
-
+        
+        # Upsampling
+        out = self.upsampling(out)
+        
+        # Final conv
+        out = self.exit(out)
+        
         return out
     
 def test():
