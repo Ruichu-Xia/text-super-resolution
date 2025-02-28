@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
+import math
+from tqdm import tqdm
 
 
 class DenseResidualBlock(nn.Module):
@@ -114,7 +116,7 @@ class RRDBNet(nn.Module):
 
 
 class Discriminator_VGG(nn.Module):
-    def __init__(self, in_channels=3, base_channels=64):
+    def __init__(self, in_channels=1, base_channels=64):
         super(Discriminator_VGG, self).__init__()
 
         def conv_block(in_f, out_f, normalize=True):
@@ -204,6 +206,70 @@ class VGGFeatureExtractor(nn.Module):
     def forward(self, x):
         return self.feature_extractor(x)
 
+class MobileNetFeatureExtractor(nn.Module):
+    def __init__(self, depth=5):
+        super(MobileNetFeatureExtractor, self).__init__()
+        # Get a pretrained MobileNetV2
+        mobilenet = models.mobilenet_v2(pretrained=True)
+        
+        # Modify the first layer to accept 1 channel
+        original_weight = mobilenet.features[0][0].weight.data
+        new_conv = nn.Conv2d(1, 32, kernel_size=3, stride=2, padding=1, bias=False)
+        with torch.no_grad():
+            new_weight = original_weight.sum(dim=1, keepdim=True) / 3.0
+            new_conv.weight.data = new_weight
+        
+        # Replace the first layer
+        mobilenet.features[0][0] = new_conv
+        
+        # Extract only the needed depth
+        self.features = nn.Sequential()
+        for i in range(min(depth, len(mobilenet.features))):
+            self.features.add_module(str(i), mobilenet.features[i])
+            
+        # Freeze parameters
+        for param in self.parameters():
+            param.requires_grad = False
+            
+    def forward(self, x):
+        return self.features(x)
+
+
+class EfficientNetLiteDiscriminator(nn.Module):
+    def __init__(self):
+        super(EfficientNetLiteDiscriminator, self).__init__()
+        
+        # Load pretrained EfficientNet-Lite0
+        self.efficientnet = models.efficientnet_b0(pretrained=True)
+        
+        # Modify first conv layer to accept grayscale input
+        original_conv = self.efficientnet.features[0][0]
+        self.efficientnet.features[0][0] = nn.Conv2d(
+            1, 32,
+            kernel_size=3, 
+            stride=2,
+            padding=1,
+            bias=False
+        )
+        
+        # Average the RGB weights to create grayscale weights
+        with torch.no_grad():
+            rgb_weight = original_conv.weight
+            self.efficientnet.features[0][0].weight.copy_(
+                rgb_weight.sum(dim=1, keepdim=True) / 3.0
+            )
+            
+        # Replace classifier with binary classification head
+        self.efficientnet.classifier = nn.Sequential(
+            nn.Dropout(p=0.2),
+            nn.Linear(1280, 1),
+            nn.Sigmoid()
+        )
+        
+    def forward(self, x):
+        return self.efficientnet(x)
+
+
 
 def perceptual_loss(gen_img, real_img, vgg_extractor):
     gen_features = vgg_extractor(gen_img)
@@ -249,32 +315,30 @@ def train_esrgan(
 
     for epoch in range(num_epochs):
         epoch_g_pix_loss = 0.0
-        epoch_g_perc_loss = 0.0
+        # epoch_g_perc_loss = 0.0
         epoch_g_adv_loss = 0.0
         epoch_g_loss = 0.0
         epoch_d_loss = 0.0
         num_batches = 0
 
-        for lr_imgs, hr_imgs in training_dataloader:
+        progress_bar = tqdm(training_dataloader, desc="Training", leave=True)
+
+        for lr_imgs, hr_imgs in progress_bar:
             lr_imgs = lr_imgs.to(device)
             hr_imgs = hr_imgs.to(device)
             num_batches += 1
 
             # === 1. Train Discriminator ===
             d_optimizer.zero_grad()
-            print(1111)
             # Generate super-resolution images, detach to avoid updating generator
             sr_imgs = generator(lr_imgs).detach()
-            print(2222)
             # Get discriminator predictions for real and fake images
             real_pred = discriminator(hr_imgs)
             fake_pred = discriminator(sr_imgs)
-            print(3333)
             # Calculate discriminator loss
             d_loss = ra_discriminator_loss(real_pred, fake_pred)
             d_loss.backward()
             d_optimizer.step()
-            print(444444)
             epoch_d_loss += d_loss.item()
 
             # === 2. Train Generator ===
@@ -289,31 +353,38 @@ def train_esrgan(
             
             # Calculate generator losses
             g_adv_loss = ra_generator_loss(real_pred, fake_pred)
-            g_perc_loss = perceptual_loss(sr_imgs, hr_imgs, vgg_extractor)
+            # g_perc_loss = perceptual_loss(sr_imgs, hr_imgs, vgg_extractor)
             g_pix_loss = F.l1_loss(sr_imgs, hr_imgs)
+
             
             # Weighted sum of losses
-            g_loss = 0.001 * g_adv_loss + 1.0 * g_perc_loss + 1.0 * g_pix_loss
+            g_loss = 0.001 * g_adv_loss + 1.0 * g_pix_loss  # + 1.0 * g_perc_loss when using perceptual loss
             
             g_loss.backward()
             g_optimizer.step()
             
             # Accumulate losses for epoch average
             epoch_g_pix_loss += g_pix_loss.item()
-            epoch_g_perc_loss += g_perc_loss.item()
+            # epoch_g_perc_loss += g_perc_loss.item()
             epoch_g_adv_loss += g_adv_loss.item()
             epoch_g_loss += g_loss.item()
 
+            # Display current losses and learning rates after tqdm bar
+            current_g_lr = g_optimizer.param_groups[0]['lr']
+            current_d_lr = d_optimizer.param_groups[0]['lr']
+            print(f"\rG_loss: {g_loss.item():.4f} | D_loss: {d_loss.item():.4f} | "
+                  f"G_lr: {current_g_lr:.6f} | D_lr: {current_d_lr:.6f}", end="")
+
         # Calculate epoch averages
         epoch_g_pix_loss /= num_batches
-        epoch_g_perc_loss /= num_batches
+        # epoch_g_perc_loss /= num_batches
         epoch_g_adv_loss /= num_batches
         epoch_g_loss /= num_batches
         epoch_d_loss /= num_batches
         
         # Log training losses
         history["g_pix_loss"].append(epoch_g_pix_loss)
-        history["g_perc_loss"].append(epoch_g_perc_loss)
+        # history["g_perc_loss"].append(epoch_g_perc_loss)
         history["g_adv_loss"].append(epoch_g_adv_loss)
         history["g_loss"].append(epoch_g_loss)
         history["d_loss"].append(epoch_d_loss)
@@ -323,14 +394,14 @@ def train_esrgan(
         discriminator.eval()
         
         val_g_pix_loss = 0.0
-        val_g_perc_loss = 0.0
+        # val_g_perc_loss = 0.0
         val_g_adv_loss = 0.0
         val_g_loss = 0.0
         val_d_loss = 0.0
         val_psnr = 0.0
         
         with torch.no_grad():
-            for lr_imgs, hr_imgs in validation_dataloader:
+            for lr_imgs, hr_imgs in tqdm(validation_dataloader):
                 lr_imgs = lr_imgs.to(device)
                 hr_imgs = hr_imgs.to(device)
                 
@@ -341,7 +412,7 @@ def train_esrgan(
                 fake_pred = discriminator(sr_imgs)
                 
                 batch_g_adv_loss = ra_generator_loss(real_pred, fake_pred).item()
-                batch_g_perc_loss = perceptual_loss(sr_imgs, hr_imgs, vgg_extractor).item()
+                # batch_g_perc_loss = perceptual_loss(sr_imgs, hr_imgs, vgg_extractor).item()
                 batch_g_pix_loss = F.l1_loss(sr_imgs, hr_imgs).item()
                 batch_d_loss = ra_discriminator_loss(real_pred, fake_pred).item()
                 
@@ -350,22 +421,22 @@ def train_esrgan(
                 batch_psnr = 20 * math.log10(1.0) - 10 * math.log10(mse)
                 
                 val_g_pix_loss += batch_g_pix_loss
-                val_g_perc_loss += batch_g_perc_loss
+                # val_g_perc_loss += batch_g_perc_loss
                 val_g_adv_loss += batch_g_adv_loss
                 val_d_loss += batch_d_loss
                 val_psnr += batch_psnr
             
             # Calculate validation averages
             val_g_pix_loss /= len(validation_dataloader)
-            val_g_perc_loss /= len(validation_dataloader)
+            # val_g_perc_loss /= len(validation_dataloader)
             val_g_adv_loss /= len(validation_dataloader)
-            val_g_loss = 0.001 * val_g_adv_loss + 1.0 * val_g_perc_loss + 1.0 * val_g_pix_loss
+            val_g_loss = 0.001 * val_g_adv_loss + 1.0 * val_g_pix_loss # + 1.0 * val_g_perc_loss
             val_d_loss /= len(validation_dataloader)
             val_psnr /= len(validation_dataloader)
             
             # Log validation results
             history["val_g_pix_loss"].append(val_g_pix_loss)
-            history["val_g_perc_loss"].append(val_g_perc_loss)
+            # history["val_g_perc_loss"].append(val_g_perc_loss)
             history["val_g_adv_loss"].append(val_g_adv_loss)
             history["val_g_loss"].append(val_g_loss)
             history["val_d_loss"].append(val_d_loss)

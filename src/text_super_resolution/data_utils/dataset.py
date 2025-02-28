@@ -31,9 +31,9 @@ class LocalImageDataset(Dataset):
             input_image = input_image.unsqueeze(0)
             target_image = target_image.unsqueeze(0)
             
-            # Repeat the single channel 3 times to get (3,H,W)
-            input_image = input_image.repeat(3, 1, 1)
-            target_image = target_image.repeat(3, 1, 1)
+            # # Repeat the single channel 3 times to get (3,H,W)
+            # input_image = input_image.repeat(3, 1, 1)
+            # target_image = target_image.repeat(3, 1, 1)
         else:
             # Handle the case where images already have multiple channels
             input_image = input_image.permute(2, 0, 1)
