@@ -5,8 +5,10 @@ import matplotlib.pyplot as plt
 
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
+
+import numpy as np
+from PIL import Image
 
 
 class SobelFilter(torch.nn.Module):
@@ -195,3 +197,37 @@ def get_device():
         else torch.device("cpu")
     )
     return device
+
+
+def preprocess_image(image, device):
+    image = torch.tensor(np.array(image, dtype=np.float32))
+    if image.dim() == 2:
+        image = image.unsqueeze(0) 
+    else:
+        image = image.permute(2, 0, 1) 
+
+    image = image / 255.0
+
+    input_tensor = image.unsqueeze(0).to(device)
+    return input_tensor
+
+
+def save_output_image(output_tensor, save_path):
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    img_np = output_tensor.permute(1, 2, 0).cpu().numpy()
+    img_np = (img_np * 255.0).clip(0, 255).astype(np.uint8)
+    if img_np.shape[-1] == 1:
+        img_np = np.squeeze(img_np, axis=-1)
+    pil_img = Image.fromarray(img_np)
+    pil_img.save(save_path, format='PNG')
+
+
+def restore_full_page(page_num, page_dir, model, device):
+    input_image_path = f"data/{page_dir}/downsampled_4x/Page_{page_num}.png"
+    output_image_path = f"data/{page_dir}/restoration_4x/Page_{page_num}.png"
+    image = Image.open(input_image_path).convert('L')
+    
+    input_tensor = preprocess_image(image, device)
+    with torch.no_grad():
+        output_tensor = model(input_tensor).squeeze(0)
+    save_output_image(output_tensor, output_image_path)

@@ -3,3 +3,4 @@ src/text_super_resolution/data/
 src/text_super_resolution/ckpt/
 .DS_Store
 **/__pycache__/
+src/text_super_resolution/saved_models/

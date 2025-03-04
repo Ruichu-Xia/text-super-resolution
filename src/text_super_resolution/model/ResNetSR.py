@@ -33,7 +33,9 @@ class UpsampleBlock(nn.Module):
 class ResNetSR(nn.Module):
     def __init__(self, upscale_factor: int, num_res_blocks=8, num_channels=3, num_features=64):
         super(ResNetSR, self).__init__()
-    
+
+        self.upscale_factor = upscale_factor
+
         self.entry = nn.Conv2d(num_channels, num_features, kernel_size=3, stride=1, padding=1)
 
         self.res_blocks = nn.Sequential(
@@ -43,8 +45,8 @@ class ResNetSR(nn.Module):
         self.mid_conv = nn.Conv2d(num_features, num_features, kernel_size=3, stride=1, padding=1)
 
         upsampling = []
-        if upscale_factor in [2, 4, 8]:
-            for _ in range(int(torch.log2(torch.tensor(upscale_factor)))):
+        if self.upscale_factor in [2, 4, 8]:
+            for _ in range(int(torch.log2(torch.tensor(self.upscale_factor)))):
                 upsampling.append(UpsampleBlock(num_features, 2))
         else:
             print("Upsacle factor not accepted!")
@@ -53,7 +55,8 @@ class ResNetSR(nn.Module):
         self.exit = nn.Conv2d(num_features, num_channels, kernel_size=3, stride=1, padding=1)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        residual = F.interpolate(x, scale_factor=self.upsampling[0].upsample[1].upscale_factor, mode='bicubic', align_corners=False)
+        # residual = F.interpolate(x, scale_factor=self.upsampling[0].upsample[1].upscale_factor, mode='bicubic', align_corners=False)
+        residual = F.interpolate(x, scale_factor=self.upscale_factor, mode='bicubic', align_corners=False)
 
         out = self.entry(x)
         out = self.res_blocks(out)
