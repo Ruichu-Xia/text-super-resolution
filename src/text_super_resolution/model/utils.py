@@ -223,8 +223,8 @@ def save_output_image(output_tensor, save_path):
 
 
 def restore_full_page(page_num, page_dir, model, device):
-    input_image_path = f"data/{page_dir}/downsampled_4x/Page_{page_num}.png"
-    output_image_path = f"data/{page_dir}/restoration_4x/Page_{page_num}.png"
+    input_image_path = f"{page_dir}/downsampled_4x/Page_{page_num}.png"
+    output_image_path = f"{page_dir}/restoration_4x/Page_{page_num}.png"
     image = Image.open(input_image_path).convert('L')
     
     input_tensor = preprocess_image(image, device)
