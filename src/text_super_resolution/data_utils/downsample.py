@@ -24,9 +24,7 @@ def downsample_images(input_dir, output_base_dir, sizes):
     print("Downsampling complete!")
 
 
-def downsample_by_factors(input_dir, output_base_dir, factors = [2, 4, 8]):
-    
-
+def downsample_by_factors(input_dir, output_base_dir, factors=[2, 4, 8]):
     for factor in factors:
         os.makedirs(f"{output_base_dir}_{factor}x", exist_ok=True)
 
@@ -34,8 +32,12 @@ def downsample_by_factors(input_dir, output_base_dir, factors = [2, 4, 8]):
         if filename.endswith((".png", ".jpg", ".jpeg")):
             img_path = os.path.join(input_dir, filename)
             img = cv2.imread(img_path)
+            
+            # Convert to grayscale if not already
+            if len(img.shape) == 3 and img.shape[2] > 1:
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-            original_height, original_width = img.shape[:2]
+            original_height, original_width = img.shape[:2] if len(img.shape) > 2 else img.shape
 
             for factor in factors:
                 new_width = original_width // factor
@@ -66,13 +68,19 @@ def pdf_to_image(pdf_directory, page_num, output_directory):
         elif pix.n == 3:
             img_data = cv2.cvtColor(img_data, cv2.COLOR_RGB2BGR)
         
+        # Convert to grayscale (1 channel)
+        img_data = cv2.cvtColor(img_data, cv2.COLOR_BGR2GRAY)
+        
         pdf_name = os.path.splitext(os.path.basename(pdf_directory))[0]
-        output_path = os.path.join(output_directory, f"page_{page_num}.png")
+        output_path = os.path.join(output_directory, f"{pdf_name}.pdf_Page_{page_num}.png")
         
         cv2.imwrite(output_path, img_data)
         pdf.close()
         
         return output_path
+    except Exception as e:
+        print(f"Error in pdf_to_image: {e}")
+        raise
         
     except Exception as e:
         print(f"Error converting PDF page to image: {e}")
